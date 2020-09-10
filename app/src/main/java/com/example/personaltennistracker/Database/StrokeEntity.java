@@ -7,6 +7,7 @@ import androidx.room.PrimaryKey;
 
 import java.io.Serializable;
 import java.util.Comparator;
+import java.util.List;
 
 @Entity(tableName = "strokes",
         foreignKeys = @ForeignKey(entity = PracticeEntity.class,
@@ -88,6 +89,14 @@ public class StrokeEntity implements Serializable, Comparable<StrokeEntity>{
 
     public void setTips(String tips) {
         this.tips = tips;
+    }
+
+    public static StrokeEntity getStroke(List<StrokeEntity> strokes, StrokeDao.StrokeType strokeType){
+        for(StrokeEntity stroke : strokes){
+            if(stroke.getStrokeType().equals(strokeType))
+                return stroke;
+        }
+        return null;
     }
 
     @Override

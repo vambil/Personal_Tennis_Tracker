@@ -40,6 +40,9 @@ public interface UserDao {
     @Query("SELECT * FROM users")
     List<UserWithPractices> getUsersWithPractices();
 
+    @Query("SELECT * FROM strokes WHERE practiceId IN (SELECT practiceId FROM practices WHERE userId LIKE :userId)")
+    List<StrokeEntity> getAllStrokes(int userId);
+
     @Insert
     void insertAll(UserEntity... users);
 

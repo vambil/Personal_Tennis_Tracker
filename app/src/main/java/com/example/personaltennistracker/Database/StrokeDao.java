@@ -22,13 +22,21 @@ public interface StrokeDao {
     @Query("SELECT * FROM strokes WHERE strokeId IN (:strokeIds)")
     List<StrokeEntity> loadAllByIds(int[] strokeIds);
 
-    @Query("SELECT * FROM strokes WHERE strokeId LIKE :id LIMIT 1")
-    StrokeEntity findById(int id);
+    @Query("SELECT * FROM strokes WHERE strokeId LIKE :strokeId LIMIT 1")
+    StrokeEntity findById(int strokeId);
+
+    @Query("SELECT * FROM strokes WHERE practiceId IN (:practiceIds)")
+    List<StrokeEntity> loadAllByPracticeIds(int[] practiceIds);
+
+    @Query("SELECT * FROM strokes WHERE practiceId LIKE :practiceId")
+    List<StrokeEntity> loadAllByPracticeId(int practiceId);
 
     @Insert
     void insertAll(StrokeEntity... strokeEntities);
 
     @Delete
     void delete(StrokeEntity strokeEntity);
+
+
     
 }

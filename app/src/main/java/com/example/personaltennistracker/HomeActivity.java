@@ -2,10 +2,10 @@ package com.example.personaltennistracker;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.ProgressBar;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -30,9 +30,11 @@ import com.anychart.enums.MarkerType;
 import com.anychart.enums.Position;
 import com.anychart.enums.TooltipPositionMode;
 import com.anychart.graphics.vector.Stroke;
-
 import com.example.personaltennistracker.Database.AppDatabase;
 import com.example.personaltennistracker.Database.PracticeEntity;
+import com.example.personaltennistracker.Database.PracticeWithStrokes;
+import com.example.personaltennistracker.Database.StrokeDao;
+import com.example.personaltennistracker.Database.StrokeEntity;
 import com.example.personaltennistracker.Database.UserEntity;
 import com.example.personaltennistracker.PracticeSurvey.NewPractice;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
@@ -42,10 +44,6 @@ import org.joda.time.DateTime;
 import org.joda.time.DateTimeConstants;
 
 import java.text.SimpleDateFormat;
-import java.time.DayOfWeek;
-import java.time.LocalDate;
-import java.time.temporal.TemporalAdjuster;
-import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -66,7 +64,7 @@ public class HomeActivity extends AppCompatActivity {
 
 
         /*Charts begin*/
-        ProgressBar progressBar = (ProgressBar) findViewById(R.id.progressBar);
+        final ProgressBar progressBar = (ProgressBar) findViewById(R.id.progressBar);
         progressBar.bringToFront();
 
         /*Add Weekly Bar Chart*/
@@ -76,7 +74,7 @@ public class HomeActivity extends AppCompatActivity {
             @Override
             public void run() {
                 //Define time range
-                Date monday = DateTime.now().withDayOfWeek(DateTimeConstants.MONDAY).toDate();
+                Date monday = DateTime.now().withTimeAtStartOfDay().withDayOfWeek(DateTimeConstants.MONDAY).toDate();
                 Date now = new Date();
 
                 //query practices for this week
@@ -87,7 +85,6 @@ public class HomeActivity extends AppCompatActivity {
                 //populate weeklyDuration chart
                 final AnyChartView weeklyDuration = findViewById(R.id.weeklyDuration);
                 final Cartesian barChart = createWeeklyDurationChart(weeklyDuration, thisWeek);
-
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
@@ -96,159 +93,53 @@ public class HomeActivity extends AppCompatActivity {
                 });
 
                 //populate strokeProgress chart
+                List<PracticeWithStrokes> strokesThisWeek = new ArrayList<>();
+                for(PracticeEntity p : thisWeek){
+                    strokesThisWeek.add(db.practiceDao().getPracticesWithStrokesPracticeId(p.getPracticeId()));
+                }
+                final AnyChartView strokeProgressChart = findViewById(R.id.strokeProgressChart);
+                final Cartesian lineChart = createStrokeProgressChart(strokesThisWeek, strokeProgressChart);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        strokeProgressChart.setChart(lineChart);
+                    }
+                });
+
+                //populate strengthChart
+
+                //get alltime strokes for user
+                List<StrokeEntity> allStrokes = db.userDao().getAllStrokes(user.getUserId());
+                final AnyChartView strengthChart = findViewById(R.id.strengthChart);
+                final Radar radarChart = createStrengthChart(allStrokes, strengthChart);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        strengthChart.setChart(radarChart);
+                        progressBar.setVisibility(View.GONE);
+                    }
+                });
+
+                //TODO Stroke Tips
+                //select the highest rating tip for serve, backhand and forehand
+                final StrokeEntity maxForehand = getMaxRating(allStrokes, StrokeDao.StrokeType.FOREHAND);
+                final StrokeEntity maxBackhand = getMaxRating(allStrokes, StrokeDao.StrokeType.BACKHAND);
+                final StrokeEntity maxServe = getMaxRating(allStrokes, StrokeDao.StrokeType.SERVE);
+
+                //update StrokeTips
+                final TextView tip1 = (TextView) findViewById(R.id.tip1);
+                final TextView tip2 = (TextView) findViewById(R.id.tip2);
+                final TextView tip3 = (TextView) findViewById(R.id.tip3);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        tip1.setText(maxForehand.getTips());
+                        tip2.setText(maxBackhand.getTips());
+                        tip3.setText(maxServe.getTips());
+                    }
+                });
             }
         }).start();
-
-
-
-        /*Stroke Progress*/
-        AnyChartView strokeProgressChart = findViewById(R.id.strokeProgressChart);
-        APIlib.getInstance().setActiveAnyChartView(strokeProgressChart);
-
-        Cartesian cartesian = AnyChart.line();
-
-        cartesian.animation(true);
-
-        cartesian.padding(10d, 20d, 5d, 20d);
-
-        cartesian.crosshair().enabled(true);
-        cartesian.crosshair()
-                .yLabel(true)
-                // TODO ystroke
-                .yStroke((Stroke) null, null, null, (String) null, (String) null);
-
-        cartesian.tooltip().positionMode(TooltipPositionMode.POINT);
-
-        cartesian.title("Stroke Progress");
-
-        cartesian.yAxis(0).title("Rating");
-        cartesian.xAxis(0).labels().padding(5d, 5d, 5d, 5d);
-
-        List<DataEntry> seriesData = new ArrayList<>();
-        seriesData.add(new CustomDataEntry("1986", 3.6, 2.3, 2.8));
-        seriesData.add(new CustomDataEntry("1987", 7.1, 4.0, 4.1));
-        seriesData.add(new CustomDataEntry("1988", 8.5, 6.2, 5.1));
-        seriesData.add(new CustomDataEntry("1989", 9.2, 11.8, 6.5));
-        seriesData.add(new CustomDataEntry("1990", 10.1, 13.0, 12.5));
-        seriesData.add(new CustomDataEntry("1991", 11.6, 13.9, 18.0));
-        seriesData.add(new CustomDataEntry("1992", 16.4, 18.0, 21.0));
-        seriesData.add(new CustomDataEntry("1993", 18.0, 23.3, 20.3));
-        seriesData.add(new CustomDataEntry("1994", 13.2, 24.7, 19.2));
-        seriesData.add(new CustomDataEntry("1995", 12.0, 18.0, 14.4));
-        seriesData.add(new CustomDataEntry("1996", 3.2, 15.1, 9.2));
-        seriesData.add(new CustomDataEntry("1997", 4.1, 11.3, 5.9));
-        seriesData.add(new CustomDataEntry("1998", 6.3, 14.2, 5.2));
-        seriesData.add(new CustomDataEntry("1999", 9.4, 13.7, 4.7));
-        seriesData.add(new CustomDataEntry("2000", 11.5, 9.9, 4.2));
-        seriesData.add(new CustomDataEntry("2001", 13.5, 12.1, 1.2));
-        seriesData.add(new CustomDataEntry("2002", 14.8, 13.5, 5.4));
-        seriesData.add(new CustomDataEntry("2003", 16.6, 15.1, 6.3));
-        seriesData.add(new CustomDataEntry("2004", 18.1, 17.9, 8.9));
-        seriesData.add(new CustomDataEntry("2005", 17.0, 18.9, 10.1));
-        seriesData.add(new CustomDataEntry("2006", 16.6, 20.3, 11.5));
-        seriesData.add(new CustomDataEntry("2007", 14.1, 20.7, 12.2));
-        seriesData.add(new CustomDataEntry("2008", 15.7, 21.6, 10));
-        seriesData.add(new CustomDataEntry("2009", 12.0, 22.5, 8.9));
-
-        Set set = Set.instantiate();
-        set.data(seriesData);
-        Mapping series1Mapping = set.mapAs("{ x: 'x', value: 'value' }");
-        Mapping series2Mapping = set.mapAs("{ x: 'x', value: 'value2' }");
-        Mapping series3Mapping = set.mapAs("{ x: 'x', value: 'value3' }");
-
-        com.anychart.core.cartesian.series.Line series1 = cartesian.line(series1Mapping);
-        series1.name("Forehand");
-        series1.hovered().markers().enabled(true);
-        series1.hovered().markers()
-                .type(MarkerType.CIRCLE)
-                .size(4d);
-        series1.tooltip()
-                .position("right")
-                .anchor(Anchor.LEFT_CENTER)
-                .offsetX(5d)
-                .offsetY(5d);
-
-        com.anychart.core.cartesian.series.Line series2 = cartesian.line(series2Mapping);
-        series2.name("Backhand");
-        series2.hovered().markers().enabled(true);
-        series2.hovered().markers()
-                .type(MarkerType.CIRCLE)
-                .size(4d);
-        series2.tooltip()
-                .position("right")
-                .anchor(Anchor.LEFT_CENTER)
-                .offsetX(5d)
-                .offsetY(5d);
-
-        com.anychart.core.cartesian.series.Line series3 = cartesian.line(series3Mapping);
-        series3.name("Serve");
-        series3.hovered().markers().enabled(true);
-        series3.hovered().markers()
-                .type(MarkerType.CIRCLE)
-                .size(4d);
-        series3.tooltip()
-                .position("right")
-                .anchor(Anchor.LEFT_CENTER)
-                .offsetX(5d)
-                .offsetY(5d);
-
-        cartesian.legend().enabled(true);
-        cartesian.legend().fontSize(13d);
-        cartesian.legend().padding(0d, 0d, 10d, 0d);
-
-        strokeProgressChart.setChart(cartesian);
-
-
-        /*End of stroke progress*/
-
-
-
-
-        /*Add stroke radar chart*/
-        AnyChartView strengthChart = findViewById(R.id.strengthChart);
-        APIlib.getInstance().setActiveAnyChartView(strengthChart);
-
-        Radar radar = AnyChart.radar();
-
-        radar.title("Stroke Analysis");
-
-        radar.yScale().minimum(0d);
-        radar.yScale().minimumGap(0d);
-        radar.yScale().maximum(5d);
-        radar.yScale().ticks().interval(1d);
-
-        radar.xAxis().labels().padding(5d, 5d, 5d, 5d);
-
-        radar.legend()
-                .align(Align.CENTER)
-                .enabled(true);
-
-        List<DataEntry> strengthData = new ArrayList<>();
-        strengthData.add(new ValueDataEntry("Forehand", 3.79));
-        strengthData.add(new ValueDataEntry("Backhand", 2.014));
-        strengthData.add(new ValueDataEntry("Serve", 1.4));
-        strengthData.add(new ValueDataEntry("Volley", 4.7));
-
-        Set set2 = Set.instantiate();
-        set2.data(strengthData);
-        Mapping shamanData = set2.mapAs("{ x: 'x', value: 'value' }");
-
-        Line shamanLine = radar.line(shamanData);
-        shamanLine.name("Average Rating");
-        shamanLine.markers()
-                .enabled(true)
-                .type(MarkerType.CIRCLE)
-                .size(3d);
-
-
-        radar.tooltip().format("Avg: {%Value}");
-
-        strengthChart.setChart(radar);
-
-        /*End of chart*/
-        progressBar.setVisibility(View.GONE);
-
-
 
 
         ExtendedFloatingActionButton newPracticeBtn = (ExtendedFloatingActionButton) findViewById(R.id.newPracticeBtn);
@@ -316,6 +207,11 @@ public class HomeActivity extends AppCompatActivity {
             map.put(day, map.get(day)+p.getDuration());
         }
 
+        //convert HashMap to WeeklyDuration
+        for(String key : new String[]{"Sun", "Mon", "Tue", "Wed","Thu","Fri","Sat"}){
+            weekDurationData.add(new ValueDataEntry(key, map.get(key)));
+        }
+
         Column column = barChart.column(weekDurationData);
         column.tooltip()
                 .titleFormat("{%X}")
@@ -336,11 +232,186 @@ public class HomeActivity extends AppCompatActivity {
         return barChart;
     }
 
-    private static Cartesian createStrokeProgressChart(){
-        return null;
+    private static Cartesian createStrokeProgressChart(List<PracticeWithStrokes> practiceWithStrokes, AnyChartView strokeProgressChart){
+        APIlib.getInstance().setActiveAnyChartView(strokeProgressChart);
+        Cartesian cartesian = AnyChart.line();
+        cartesian.animation(true);
+        cartesian.padding(10d, 20d, 5d, 20d);
+        cartesian.crosshair().enabled(true);
+        cartesian.crosshair()
+                .yLabel(true)
+                .yStroke((Stroke) null, null, null, (String) null, (String) null);
+        cartesian.tooltip().positionMode(TooltipPositionMode.POINT);
+        cartesian.title("Stroke Progress");
+        cartesian.yAxis(0).title("Rating");
+        cartesian.xAxis(0).labels().padding(5d, 5d, 5d, 5d);
+
+        List<DataEntry> seriesData = new ArrayList<>();
+        SimpleDateFormat simpleDateformat = new SimpleDateFormat("EE");
+
+        HashMap<String, List<Double>> forehandRatings = new HashMap<>();
+        HashMap<String, List<Double>> backhandRatings = new HashMap<>();
+        HashMap<String, List<Double>> serveRatings = new HashMap<>();
+
+        //initialize
+        for(String day : new String[]{"Sun", "Mon", "Tue", "Wed","Thu","Fri","Sat"}){
+            forehandRatings.put(day, new ArrayList<Double>());
+            backhandRatings.put(day, new ArrayList<Double>());
+            serveRatings.put(day, new ArrayList<Double>());
+        }
+
+        for(PracticeWithStrokes p : practiceWithStrokes){
+            String day = simpleDateformat.format(p.practice.getDate());
+            StrokeEntity forehand = StrokeEntity.getStroke(p.strokes, StrokeDao.StrokeType.FOREHAND);
+            StrokeEntity backhand = StrokeEntity.getStroke(p.strokes, StrokeDao.StrokeType.BACKHAND);
+            StrokeEntity serve = StrokeEntity.getStroke(p.strokes, StrokeDao.StrokeType.SERVE);
+
+            forehandRatings.get(day).add(forehand.getRating());
+            backhandRatings.get(day).add(backhand.getRating());
+            serveRatings.get(day).add(serve.getRating());
+        }
+
+        //populate seriesData
+        for(String day : new String[]{"Sun", "Mon", "Tue", "Wed","Thu","Fri","Sat"}){
+            //average values, add to seriesData
+            seriesData.add(new CustomDataEntry(day, average(forehandRatings.get(day)), average(backhandRatings.get(day)), average(serveRatings.get(day))));
+        }
+
+        Set set = Set.instantiate();
+        set.data(seriesData);
+        Mapping series1Mapping = set.mapAs("{ x: 'x', value: 'value' }");
+        Mapping series2Mapping = set.mapAs("{ x: 'x', value: 'value2' }");
+        Mapping series3Mapping = set.mapAs("{ x: 'x', value: 'value3' }");
+
+        com.anychart.core.cartesian.series.Line series1 = cartesian.line(series1Mapping);
+        series1.name("Forehand");
+        series1.hovered().markers().enabled(true);
+        series1.hovered().markers()
+                .type(MarkerType.CIRCLE)
+                .size(4d);
+        series1.tooltip()
+                .position("right")
+                .anchor(Anchor.LEFT_CENTER)
+                .offsetX(5d)
+                .offsetY(5d);
+
+        com.anychart.core.cartesian.series.Line series2 = cartesian.line(series2Mapping);
+        series2.name("Backhand");
+        series2.hovered().markers().enabled(true);
+        series2.hovered().markers()
+                .type(MarkerType.CIRCLE)
+                .size(4d);
+        series2.tooltip()
+                .position("right")
+                .anchor(Anchor.LEFT_CENTER)
+                .offsetX(5d)
+                .offsetY(5d);
+
+        com.anychart.core.cartesian.series.Line series3 = cartesian.line(series3Mapping);
+        series3.name("Serve");
+        series3.hovered().markers().enabled(true);
+        series3.hovered().markers()
+                .type(MarkerType.CIRCLE)
+                .size(4d);
+        series3.tooltip()
+                .position("right")
+                .anchor(Anchor.LEFT_CENTER)
+                .offsetX(5d)
+                .offsetY(5d);
+
+        cartesian.legend().enabled(true);
+        cartesian.legend().fontSize(13d);
+        cartesian.legend().padding(0d, 0d, 10d, 0d);
+        return cartesian;
     }
 
-    private class CustomDataEntry extends ValueDataEntry {
+    private static Radar createStrengthChart(List<StrokeEntity> allStrokes, AnyChartView strengthChart){
+        APIlib.getInstance().setActiveAnyChartView(strengthChart);
+        Radar radar = AnyChart.radar();
+        radar.title("Stroke Analysis");
+
+        radar.yScale().minimum(0d);
+        radar.yScale().minimumGap(0d);
+        radar.yScale().maximum(5d);
+        radar.yScale().ticks().interval(1d);
+        radar.xAxis().labels().padding(5d, 5d, 5d, 5d);
+
+        radar.legend()
+                .align(Align.CENTER)
+                .enabled(true);
+
+        List<DataEntry> strengthData = new ArrayList<>();
+        double avgForehand = 0.0;
+        double avgBackhand = 0.0;
+        double avgServe = 0.0;
+        double avgVolley = 0.0;
+
+        for(StrokeEntity stroke : allStrokes){
+            switch(stroke.getStrokeType()){
+                case FOREHAND:
+                    avgForehand += stroke.getRating();
+                    break;
+                case BACKHAND:
+                    avgBackhand += stroke.getRating();
+                    break;
+                case SERVE:
+                    avgServe += stroke.getRating();
+                    break;
+                case VOLLEY:
+                    avgVolley += stroke.getRating();
+                    break;
+            }
+        }
+
+        avgForehand = allStrokes.size() == 0? 0: avgForehand/(allStrokes.size()/4);
+        avgBackhand = allStrokes.size() == 0? 0: avgBackhand/(allStrokes.size()/4);
+        avgServe = allStrokes.size() == 0? 0: avgServe/(allStrokes.size()/4);
+        avgVolley = allStrokes.size() == 0? 0: avgVolley/(allStrokes.size()/4);
+
+        strengthData.add(new ValueDataEntry("Forehand", avgForehand));
+        strengthData.add(new ValueDataEntry("Backhand", avgBackhand));
+        strengthData.add(new ValueDataEntry("Serve", avgServe));
+        strengthData.add(new ValueDataEntry("Volley", avgVolley));
+
+        Set set2 = Set.instantiate();
+        set2.data(strengthData);
+        Mapping shamanData = set2.mapAs("{ x: 'x', value: 'value' }");
+
+        Line shamanLine = radar.line(shamanData);
+        shamanLine.name("Average Rating");
+        shamanLine.markers()
+                .enabled(true)
+                .type(MarkerType.CIRCLE)
+                .size(3d);
+
+
+        radar.tooltip().format("Avg: {%Value}");
+        return radar;
+    }
+
+    private static double average(List<Double> list){
+        if(list.isEmpty())
+            return 0.0;
+        double sum  = 0.0;
+        for(Double d : list)
+            sum += d;
+        return  sum/list.size();
+    }
+
+    private static StrokeEntity getMaxRating(List<StrokeEntity> allStrokes, StrokeDao.StrokeType strokeType){
+        StrokeEntity max = null;
+        double maxRating = 0.0;
+        for(StrokeEntity stroke : allStrokes){
+            if(stroke.getStrokeType().equals(strokeType) && stroke.getRating() > maxRating){
+                maxRating = stroke.getRating();
+                max = stroke;
+            }
+        }
+        return max;
+    }
+
+
+    private static class CustomDataEntry extends ValueDataEntry {
         public CustomDataEntry(String x, Number value, Number value2, Number value3) {
             super(x, value);
             setValue("value2", value2);
